@@ -21,6 +21,7 @@ exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
  
 4: No k8s images available. Pull k8s images. # if pull not work pull images manually.
    # kubeadm config images pull
+   # kubeadm config images list
    list images
    # docker images
 
