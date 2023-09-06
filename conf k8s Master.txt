@@ -1,0 +1,88 @@
+$$ Conf K8s master:
+1: Install docker & enable permanently
+   # dnf install docker -y
+   # systemctl enable docker --now
+   
+2: configure repo for k8s "kubernetes.repo"
+   # vim /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.28/rpm/
+enabled=1
+gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.28/rpm/repodata/repomd.xml.key
+exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
+   
+   - install k8s softwares
+   # yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+
+3: enable kubelet permanently as it is agent prg in slaves
+   # systemctl enable --now kubelet
+ 
+4: No k8s images available. Pull k8s images. # if pull not work pull images manually.
+   # kubeadm config images pull
+   list images
+   # docker images
+
+5: Initialize the k8s master
+   # kubeadm init
+
+6: solve the warnings & errors.
+   - warning: "cgroupdriver" and "tc not found" )
+   - Set "systemd" as cgroupdriver
+   {{ create only if needed...  }}
+   
+   #  vim /etc/docker/daemon.json   
+   {
+   "exec-opts": ["native.cgroupdriver=systemd"]
+   }
+   # yum install iproute-tc -y
+   
+   -for Errors: NumCPU  &  Mem  use "--ignore-preflight-errors="
+    
+7: Initialize the k8s master with correct parameters
+   # kubeadm init --pod-network-cidr=10.240.0.0/16 --ignore-preflight-errors=numCPU --ignore-preflight-errors=Mem
+   
+8: For testing you can make "k8s master" a client system (instead of creating new user for k8s)
+   # mkdir -p $HOME/.kube
+     sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+     sudo chown $(id -u):$(id -g) $HOME/.kube/config
+	 
+9: print join token for slaves to join && check nodes & pods are running or not
+   # kubeadm token create --print-join-command
+   # kubectl get pods
+   # kubectl get nodes
+  - if above commamds not woring then restart kubelet and docker service. then re-run these commands.
+ 
+10: Setup overlay or CNI by this Flannel file
+   # kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+   
+11: - Last thing to setup. The "Overlay "/"tunneling" is not configureed properly..
+    - "coredns" pods are not ready..
+    # kubectl get pod -n kube-system
+
+    - Opne file...
+    # cat /var/run/flannel/subnet.env
+	
+    - Edit the "kube-flannel-cfg" > configmap [ resource in k8s ] in  "kube-system"  namespace.
+	- Change the "Network"'s [IP Range] Value with POD Range you decided...
+	
+	- list "configmap" & edit it..
+	# kubectl get configmap -n kube-system
+	# kubectl edit configmap kube-flannel-cfg -n kube-system
+	
+    Ex: { 	"Network": " Set IP Range/cidr "
+			"Backend": {  "Type": "vxlan"	}    
+		}
+		
+    - Now delete the old flannel pods... Will recreated by ReplicaSet
+	# kubectl get pod -l app=flannel -n kube-system
+	# kubectl delete pod -l app=flannel -n kube-system
+	
+	- see changes at
+	# cat /var/run/flannel/subnet.env
+	
+	- "coredns" pods are now ready...
+	# kubectl get pod -n kube-system
+	
+	--now client can connect to any node of the cluster...
